@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ClaudeStatus is a macOS menu bar app (SwiftUI `MenuBarExtra`, no Dock icon) that tracks
 https://status.claude.com. The icon reacts only to the "claude.ai" and "Claude Code"
-components (monochrome = operational, orange = degraded, red = major outage, question
-mark = unreachable). Clicking it opens a panel that re-renders the site's uptime section:
+components. The icon is the Claude Code mascot (Clawd) drawn as a code-defined pixel
+grid in StatusIconRenderer, in labelColor (white on a dark menu bar), with a status
+dot badge at bottom right (green = operational, orange = degraded, red = major outage,
+gray = unreachable). Clicking it opens a panel that re-renders the site's uptime section:
 one card per service with status label, 90 colored day-bars, uptime percentage, and
 hover tooltips.
 
