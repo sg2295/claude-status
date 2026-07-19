@@ -2,6 +2,8 @@
 
 A macOS menu bar app that tracks [status.claude.com](https://status.claude.com).
 
+<img src="demo.png" alt="ClaudeStatus in the menu bar with its panel open" width="420">
+
 The menu bar shows Clawd (the Claude Code mascot) with a status dot that reacts
 to the claude.ai and Claude Code components: green when operational, orange when
 degraded, red on a major outage, gray when the status page is unreachable.
