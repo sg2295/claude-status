@@ -40,8 +40,16 @@ struct StatusAPIClient: Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
+    // Ids come from parseLazyComponentIDs ([a-z0-9]+), so they are URL-safe.
+    func fetchUptimeShowcase(componentIDs: [String]) async throws -> Data {
+        try await get("/uptime_showcase?components=" + componentIDs.joined(separator: ","))
+    }
+
     func fetchUptime() async throws -> [String: ComponentUptime] {
-        try HomepageUptimeParser.assemble(html: await fetchHomepageHTML())
+        let html = try await fetchHomepageHTML()
+        let lazyIDs = HomepageUptimeParser.parseLazyComponentIDs(html)
+        guard !lazyIDs.isEmpty else { return try HomepageUptimeParser.assemble(html: html) }
+        return try HomepageUptimeParser.assemble(showcase: await fetchUptimeShowcase(componentIDs: lazyIDs))
     }
 
     // Testing hook: CLAUDE_STATUS_BASE_URL=http://... points both fetches at

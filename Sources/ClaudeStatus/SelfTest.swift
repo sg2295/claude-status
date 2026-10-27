@@ -27,7 +27,23 @@ enum SelfTest {
                 isFixture = false
             }
 
-            let uptime = try HomepageUptimeParser.assemble(html: html)
+            // Lazy shape: the bars live in a separate uptime_showcase response,
+            // read from uptime_showcase.json beside a fixture or fetched live.
+            let uptime: [String: ComponentUptime]
+            let lazyIDs = HomepageUptimeParser.parseLazyComponentIDs(html)
+            if lazyIDs.isEmpty {
+                print("Inline uptime data")
+                uptime = try HomepageUptimeParser.assemble(html: html)
+            } else if isFixture, let path = arguments.first(where: { $0.hasSuffix(".html") }) {
+                let showcasePath = URL(fileURLWithPath: path)
+                    .deletingLastPathComponent().appendingPathComponent("uptime_showcase.json")
+                print("Lazy uptime data (\(lazyIDs.count) ids), parsing \(showcasePath.path)")
+                uptime = try HomepageUptimeParser.assemble(showcase: Data(contentsOf: showcasePath))
+            } else {
+                print("Lazy uptime data (\(lazyIDs.count) ids), fetching uptime_showcase...")
+                uptime = try HomepageUptimeParser.assemble(
+                    showcase: await StatusAPIClient().fetchUptimeShowcase(componentIDs: lazyIDs))
+            }
             for (id, componentUptime) in uptime.sorted(by: { $0.key < $1.key }) {
                 let bars = componentUptime.bars
                 let eventDays = bars.filter { !$0.eventNames.isEmpty }.count
@@ -105,6 +121,11 @@ enum SelfTest {
         switch await collectResult(byteCount: 101, limit: 100) {
         case .failure: break
         default: failures.append("collect should throw when the stream exceeds the limit")
+        }
+
+        let lazyHTML = #"<div data-uptime-lazy="abc1"></div><div data-uptime-lazy="x y"></div><div data-uptime-lazy="abc1"></div><div data-uptime-lazy="def2"></div>"#
+        if HomepageUptimeParser.parseLazyComponentIDs(lazyHTML) != ["abc1", "def2"] {
+            failures.append("parseLazyComponentIDs should dedupe and reject non [a-z0-9] ids")
         }
 
         if sanitized("claude.ai: OK") != "claude.ai: OK" {

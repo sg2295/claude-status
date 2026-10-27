@@ -7,19 +7,26 @@ enum ParseError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .uptimeValuesNotFound:
-            return "uptimeValues assignment not found in homepage HTML"
+            return "uptime percentages not found in homepage HTML or uptime_showcase response"
         case .noComponentsParsed:
-            return "no component uptime data could be parsed from homepage HTML"
+            return "no component uptime data could be parsed"
         }
     }
 }
 
-// Extracts the uptime section data that status.claude.com (Atlassian Statuspage)
-// embeds in its homepage. Three independent extractions, merged by day index:
-//   1. uptimeValues JS assignment: the exact displayed 90-day percentages (required)
+// Extracts the uptime section data of status.claude.com (Atlassian Statuspage).
+// Three independent extractions, merged by day index:
+//   1. uptimeValues: the exact displayed 90-day percentages (required)
 //   2. SVG rect fills: the exact per-day bar colors (required per component)
-//   3. uptimeData JS assignment: per-day dates, outage seconds, incident names
+//   3. uptimeData: per-day dates, outage seconds, incident names
 //      (soft; only tooltips are lost when it fails)
+// The homepage ships them in one of two shapes:
+//   - Lazy: each component has a `data-uptime-lazy="<id>"` placeholder and the
+//     page's script fetches GET /uptime_showcase?components=<id>,<id>, a JSON
+//     object holding the rect markup (components), uptimeData (timelines) and
+//     uptimeValues (values). See assemble(showcase:).
+//   - Inline: all three are embedded in the homepage HTML as JS assignments
+//     and SVG markup. See assemble(html:).
 // Fallback if uptimeValues ever disappears: Statuspage computes
 //   uptime = 1 - (m + 0.3 * p) / (elapsed_days * 86400)
 // from the day-level outage seconds in uptimeData (verified against the
@@ -27,10 +34,33 @@ enum ParseError: Error, CustomStringConvertible {
 enum HomepageUptimeParser {
 
     static func assemble(html: String) throws -> [String: ComponentUptime] {
-        let values = try parseUptimeValues(html)
-        let colors = parseRectColors(html)
-        let dayData = parseUptimeData(html)
+        try merge(values: parseUptimeValues(html), colors: parseRectColors(html), dayData: parseUptimeData(html))
+    }
 
+    static func assemble(showcase data: Data) throws -> [String: ComponentUptime] {
+        let showcase = try JSONDecoder().decode(UptimeShowcase.self, from: data)
+        guard let values = showcase.values else { throw ParseError.uptimeValuesNotFound }
+        let markup = (showcase.components ?? [:]).values.joined(separator: "\n")
+        return try merge(values: values, colors: parseRectColors(markup), dayData: showcase.timelines)
+    }
+
+    // Component ids of the lazy-load placeholders, in page order, deduplicated
+    // and capped at the server's batch limit. Empty for the inline shape.
+    static func parseLazyComponentIDs(_ html: String) -> [String] {
+        let re = #/data-uptime-lazy="([a-z0-9]+)"/#
+        var seen = Set<String>()
+        var ids: [String] = []
+        for match in html.matches(of: re) where seen.insert(String(match.output.1)).inserted {
+            ids.append(String(match.output.1))
+        }
+        return Array(ids.prefix(showcaseBatchLimit))
+    }
+
+    static let showcaseBatchLimit = 60
+
+    private static func merge(
+        values: [UptimeValue], colors: [String: [String]], dayData: [String: UptimeComponentRaw]?
+    ) throws -> [String: ComponentUptime] {
         var out: [String: ComponentUptime] = [:]
         for value in values {
             // 90 bars expected; tolerate small template drift, reject nonsense.

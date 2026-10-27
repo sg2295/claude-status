@@ -12,7 +12,7 @@ Clicking the icon opens a panel with one card per service: current status, the
 and the uptime percentage.
 
 Live status comes from the official Statuspage API (polled every 90 seconds);
-the 90-day history is parsed from the status page's homepage HTML, since no
+the 90-day history is parsed from the status page's homepage uptime section, since no
 public API exposes that window. If the page's markup changes, the app degrades
 to status-only cards rather than breaking.
 

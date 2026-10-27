@@ -19,7 +19,7 @@ hover tooltips.
 make run                              # build, assemble+sign bundle, launch
 make check                            # parser selftest against the live site
 make check FIXTURE=fixtures/homepage.html   # selftest against a local fixture
-make fixtures                         # download homepage.html + summary.json into fixtures/
+make fixtures                         # download homepage.html, summary.json, uptime_showcase.json into fixtures/
 make install                          # copy bundle to ~/Applications and launch
 ```
 
@@ -28,22 +28,27 @@ no asset catalogs). The regression test is the binary's `--selftest [file.html]`
 (SelfTest.swift), wired to `make check`. Run it after any change to the parsing layer,
 and run `make fixtures` first so a fixture-based run works offline.
 
-Build is plain `swift build -c release`; the `.app` bundle (LSUIElement, ad-hoc codesign)
+Build is `swift build -c release` with `SDKROOT` pinned to the macOS 26.5 SDK (Makefile
+`SDK` variable): the 27 SDK's SwiftUI `@State` macro needs a `SwiftUIMacros` plugin that
+Command Line Tools do not ship, so building against it fails. The `.app` bundle (LSUIElement, ad-hoc codesign)
 is assembled by the Makefile `app` target from `Resources/Info.plist`.
 
 ## Architecture: two data sources, on purpose
 
 1. `GET /api/v2/summary.json` (official Statuspage API) - polled every 90s by
    StatusStore for the icon state and the per-component status labels.
-2. `GET /` (homepage HTML) - fetched on panel open (5 min TTL) and parsed by
-   HomepageUptimeParser for the 90-day bars. The HTML embeds three things:
-   `uptimeValues` (the exact displayed percentages), per-day SVG `<rect>` fills
-   (the exact bar colors), and `uptimeData` (dates, outage seconds, incident names
-   for tooltips).
+2. `GET /` (homepage HTML) then `GET /uptime_showcase?components=<id>,...` - fetched
+   on panel open (5 min TTL) and parsed by HomepageUptimeParser for the 90-day bars.
+   The homepage lazy-loads its uptime section: each component has a
+   `data-uptime-lazy="<id>"` placeholder, and the showcase endpoint returns JSON with
+   `values` (uptimeValues: the exact displayed percentages), `components` (per-id SVG
+   markup whose `<rect>` fills are the exact bar colors), and `timelines` (uptimeData:
+   dates, outage seconds, incident names for tooltips). When the homepage has no
+   placeholders, the parser reads the same three things inline from the HTML.
 
 Do NOT switch the bars to `/uptime/{id}.json`: it only returns the current calendar
-quarter, not the trailing 90 days, and ignores date-range params. The homepage is the
-only public source of the 90-day window. If `uptimeValues` ever disappears, the
+quarter, not the trailing 90 days, and ignores date-range params. The homepage (and its
+showcase endpoint) is the only public source of the 90-day window. If `uptimeValues` ever disappears, the
 fallback formula is `uptime = 1 - (m + 0.3*p) / (elapsed_days * 86400)` from
 uptimeData's day-level outage seconds (documented in the parser).
 

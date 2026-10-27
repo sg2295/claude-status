@@ -44,6 +44,14 @@ struct UptimeValue: Codable, Sendable {
     let thirty: Double
 }
 
+// Response of GET /uptime_showcase?components=<id>,<id>: the per-component
+// SVG bar markup, the uptimeData timelines, and the uptimeValues percentages.
+struct UptimeShowcase: Codable, Sendable {
+    let components: [String: String]?
+    let timelines: [String: UptimeComponentRaw]?
+    let values: [UptimeValue]?
+}
+
 struct UptimeComponentRaw: Codable, Sendable {
     let days: [UptimeDayRaw]?
 }
